@@ -1,34 +1,39 @@
 class RecipesController < ApplicationController
+  before_action :authorize
+  before_action :set_recipe, only: [:show, :update, :destroy]
+  rescue_from ActiveRecord::RecordInvalid, with: :invalid_entry
+
     def index
-        if session[:user_id]
-          recipes = Recipe.all.includes(:user).select(:id, :title, :instructions, :minutes_to_complete, 'users.username', 'users.image_url', 'users.bio')
-          render json: recipes.as_json(only: [:username, :image_url, :bio]), status: :ok
-        else
-          render json: { error: "Unauthorized" }, status: :unauthorized
-        end
+      @recipes = Recipe.all
+      render json: @recipes
+    end
+
+    def show
+      render json: @recipe
     end
 
     def create
-        if session[:user_id]
-          recipe = Recipe.new(recipe_params)
-          recipe.user_id = session[:user_id]
+      user = User.find(session[:user_id])
+      recipe = user.recipes.create!(recipe_params)
+      render json: recipe, status: :created
+    end
+
+
+    private
+
+    def set_recipe
+      @recipe = Recipe.find(params[:id])
+    end
     
-          if recipe.valid?
-            recipe.save
-            render json: recipe.as_json(only: [:username, :image_url, :bio]), status: :created
-          else
-            render json: { errors: recipe.errors.full_messages }, status: :unprocessable_entity
-          end
-        else
-          render json: { error: "Not authorized" }, status: :unauthorized
-        end
-      end
-    
-      private
-    
-      def recipe_params
-        params.permit(:title, :instructions, :minutes_to_complete)
-      end 
-    
-   
+    def recipe_params
+      params.permit(:title, :instructions, :minutes_to_complete)
+    end 
+
+    def authorize
+      return render json: { errors: [ "Not authorized" ] }, status: :unauthorized unless session.include? :user_id
+    end
+
+    def invalid_entry(invalid)
+      render json: { errors: invalid.record.errors.full_messages }, status: :unprocessable_entity
+    end
 end
